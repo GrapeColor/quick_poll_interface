@@ -11,5 +11,5 @@ app.get ('/health', (request, response) => Health.get (request, response));
 app.post('/health', (request, response) => Health.post(request, response));
 
 app.listen(APP_LISTEN_PORT, () => {
-  console.log(`Quick Poll Interface start listening.`);
+  console.info(`Quick Poll Interface start listening at ${APP_LISTEN_PORT}.`);
 });
