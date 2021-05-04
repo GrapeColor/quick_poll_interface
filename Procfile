@@ -1,1 +1,1 @@
-worker: node dist/index.js
+worker: sudo node dist/index.js
