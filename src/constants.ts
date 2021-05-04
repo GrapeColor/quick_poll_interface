@@ -5,4 +5,4 @@ export const APP_LISTEN_PORT
 
 export const FAMILY_PASS_PHRASE = process.env['FAMILY_PASS_PHRASE'] || '';
 
-export const STATUS_UPDATE_SPAN = 60000;  // Millisecond
+export const STATUS_UPDATE_SPAN = 300000;  // Millisecond
