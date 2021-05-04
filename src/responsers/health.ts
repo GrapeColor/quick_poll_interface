@@ -1,16 +1,35 @@
 import { Request, Response } from 'express';
-import { FAMILY_PASS_PHRASE } from '../constants';
+import { FAMILY_PASS_PHRASE, STATUS_UPDATE_SPAN } from '../constants';
 
 export namespace Health {
-  interface ShardStatus {
-    shardID: number;
-    shardCount: number;
-    wsStatus: number;
+  interface CommonStatus {
+    shardID   : number;
+    wsStatus  : number;
     guildCount: number;
-    userCount: number;
+    userCount : number;
   }
 
-  const statuses: Map<number, ShardStatus> = new Map;
+  interface RegisterStatus extends CommonStatus {
+    lastUpdateTimestamp: number;
+  }
+
+  interface ShardStatus extends CommonStatus {
+    shardCount: number;
+  }
+
+  let shardCount: number = 0;
+  const statuses: Map<number, RegisterStatus> = new Map;
+
+  function sweepStatuses(): void {
+    const now = Date.now();
+
+    statuses.forEach((status, key) => {
+      if (now - status.lastUpdateTimestamp > STATUS_UPDATE_SPAN * 2)
+        statuses.delete(key);
+    });
+  }
+
+  setInterval(() => sweepStatuses(), STATUS_UPDATE_SPAN);
 
   export function get(_: Request, response: Response): void {
     let totalGuildCount = 0;
@@ -19,13 +38,15 @@ export namespace Health {
     let totalUserCount = 0;
     statuses.forEach(({ userCount }) => totalUserCount += userCount);
 
-    const statusesMap: { [key: number]: ShardStatus } = {};
+    const statusesMap: { [key: number]: RegisterStatus } = {};
     statuses.forEach((status, key) => statusesMap[key] = status);
 
     const body = {
+      completed: !!shardCount && statuses.size === shardCount,
       totalGuildCount,
       totalUserCount,
       statuses: statusesMap,
+      updateSpan: STATUS_UPDATE_SPAN,
     };
 
     response
@@ -38,7 +59,11 @@ export namespace Health {
     const body = request.body;
     if (!varifyRequest(request, response, body)) return; 
 
-    statuses.set(body.shardID, body);
+    statuses.set(body.shardID, {
+      ...body,
+      lastUpdateTimestamp: Date.now(),
+    });
+    shardCount = body.shardCount;
 
     get(request, response);
   }
