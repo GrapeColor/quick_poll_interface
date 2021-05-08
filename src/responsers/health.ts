@@ -18,7 +18,7 @@ export namespace Health {
     shardCount: number;
   }
 
-  interface ReceiveStatus {
+  interface EntireStatus {
     ready          : boolean;
     updateSpan     : number;
     totalGuildCount: number;
@@ -50,7 +50,7 @@ export namespace Health {
     const statusesMap: { [key: number]: RegisterStatus } = {};
     statuses.forEach((status, key) => statusesMap[key] = status);
 
-    const body: ReceiveStatus = {
+    const body: EntireStatus = {
       ready     : process.uptime() > STATUS_UPDATE_SPAN * 2,
       updateSpan: STATUS_UPDATE_SPAN,
       totalGuildCount,
