@@ -10,6 +10,7 @@ export namespace Health {
   }
 
   interface RegisterStatus extends CommonStatus {
+    operational         : boolean;
     lastUpdateTimestamp: number;
   }
 
@@ -17,19 +18,27 @@ export namespace Health {
     shardCount: number;
   }
 
+  interface ReceiveStatus {
+    ready          : boolean;
+    updateSpan     : number;
+    totalGuildCount: number;
+    totalUserCount : number;
+    statuses       : { [key: number]: RegisterStatus };
+  }
+
   let shardCount: number = 0;
   const statuses: Map<number, RegisterStatus> = new Map;
 
-  function sweepStatuses(): void {
+  function detectfailure(): void {
     const now = Date.now();
 
-    statuses.forEach((status, key) => {
+    statuses.forEach(status => {
       if (now - status.lastUpdateTimestamp > STATUS_UPDATE_SPAN * 2)
-        statuses.delete(key);
+        status.operational = false;
     });
   }
 
-  setInterval(() => sweepStatuses(), STATUS_UPDATE_SPAN);
+  setInterval(() => detectfailure(), STATUS_UPDATE_SPAN);
 
   export function get(_: Request, response: Response): void {
     let totalGuildCount = 0;
@@ -41,16 +50,16 @@ export namespace Health {
     const statusesMap: { [key: number]: RegisterStatus } = {};
     statuses.forEach((status, key) => statusesMap[key] = status);
 
-    const body = {
-      completed: !!shardCount && statuses.size === shardCount,
+    const body: ReceiveStatus = {
+      ready     : process.uptime() > STATUS_UPDATE_SPAN * 2,
+      updateSpan: STATUS_UPDATE_SPAN,
       totalGuildCount,
       totalUserCount,
-      statuses: statusesMap,
-      updateSpan: STATUS_UPDATE_SPAN,
+      statuses  : statusesMap,
     };
 
     response
-      .header('WWW-Authenticate', 'realm=""')
+      .header('www-authenticate', 'realm=""')
       .contentType('application/json')
       .send(body);
   }
@@ -61,6 +70,7 @@ export namespace Health {
 
     statuses.set(body.shardID, {
       ...body,
+      operational: true,
       lastUpdateTimestamp: Date.now(),
     });
     shardCount = body.shardCount;
@@ -94,7 +104,7 @@ export namespace Health {
       && typeof body.wsStatus   === 'number'
       && typeof body.guildCount === 'number'
       && typeof body.userCount  === 'number'
-    )
+    );
   }
 
   function rejectToken(response: Response, token: string | undefined): void {
@@ -104,7 +114,7 @@ export namespace Health {
 
     response
       .status(401)
-      .header('WWW-Authenticate', value)
+      .header('www-authenticate', value)
       .contentType('application/json')
       .send({});
   }
