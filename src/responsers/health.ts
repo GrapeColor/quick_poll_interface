@@ -28,7 +28,7 @@ export namespace Health {
   }
 
   let shardCount: number = 0;
-  const statuses: RegisterStatus[] = [];
+  let statuses: RegisterStatus[] = [];
 
   function detectfailure(): void {
     const now = Date.now();
@@ -41,7 +41,7 @@ export namespace Health {
   setInterval(() => detectfailure(), STATUS_UPDATE_SPAN);
 
   export function get(_: Request, response: Response): void {
-    const completed = shardCount <= statuses.length;
+    const completed = shardCount === statuses.length;
 
     const body: EntireStatus = {
       ready: completed || process.uptime() > STATUS_UPDATE_SPAN * 2,
@@ -81,6 +81,8 @@ export namespace Health {
       lastUpdateTimestamp: Date.now(),
     };
     shardCount = body.shardCount;
+
+    if (shardCount < statuses.length) statuses = statuses.slice(0, shardCount);
 
     get(request, response);
   }
