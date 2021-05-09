@@ -4,13 +4,13 @@ import { FAMILY_PASS_PHRASE, STATUS_UPDATE_SPAN } from '../constants';
 export namespace Health {
   interface CommonStatus {
     shardID   : number;
-    wsStatus  : number;
+    wsStatus  : number; // Status value of the web socket on that shard.
     guildCount: number;
     userCount : number;
   }
 
   interface RegisterStatus extends CommonStatus {
-    operational         : boolean;
+    operational        : boolean; // Indicates whether the shard is operational.
     lastUpdateTimestamp: number;
   }
 
@@ -19,43 +19,41 @@ export namespace Health {
   }
 
   interface EntireStatus {
-    ready          : boolean;
-    updateSpan     : number;
+    ready          : boolean; // The data is complete or enough time has passed to collect the data.
+    completed      : boolean; // Indicates that the data for all shards has been completed at least once.
+    updateSpan     : number;  // Interval to have data sent from a shard.
     totalGuildCount: number;
     totalUserCount : number;
-    statuses       : { [key: number]: RegisterStatus };
+    statuses       : RegisterStatus[];
   }
 
   let shardCount: number = 0;
-  const statuses: Map<number, RegisterStatus> = new Map;
+  const statuses: RegisterStatus[] = [];
 
   function detectfailure(): void {
     const now = Date.now();
 
-    statuses.forEach(status => {
+    for (const status of statuses)
       if (now - status.lastUpdateTimestamp > STATUS_UPDATE_SPAN * 2)
         status.operational = false;
-    });
   }
 
   setInterval(() => detectfailure(), STATUS_UPDATE_SPAN);
 
   export function get(_: Request, response: Response): void {
-    let totalGuildCount = 0;
-    statuses.forEach(({ guildCount }) => totalGuildCount += guildCount);
-
-    let totalUserCount = 0;
-    statuses.forEach(({ userCount }) => totalUserCount += userCount);
-
-    const statusesMap: { [key: number]: RegisterStatus } = {};
-    statuses.forEach((status, key) => statusesMap[key] = status);
+    const completed = shardCount <= statuses.length;
 
     const body: EntireStatus = {
-      ready     : process.uptime() > STATUS_UPDATE_SPAN * 2,
+      ready: completed || process.uptime() > STATUS_UPDATE_SPAN * 2,
+      completed,
       updateSpan: STATUS_UPDATE_SPAN,
-      totalGuildCount,
-      totalUserCount,
-      statuses  : statusesMap,
+      totalGuildCount: statuses.reduce(
+        (total, { guildCount }) => total + guildCount, 0
+      ),
+      totalUserCount : statuses.reduce(
+        (total, { userCount  }) => total + userCount , 0
+      ),
+      statuses,
     };
 
     response
@@ -65,35 +63,26 @@ export namespace Health {
   }
 
   export function post(request: Request, response: Response): void {
-    const body = request.body;
-    if (!varifyRequest(request, response, body)) return; 
+    const token = request.headers['www-authenticate'];
+    if (token !== `Bearer ${FAMILY_PASS_PHRASE}`) {
+      rejectToken(response, token);
+      return;
+    }
 
-    statuses.set(body.shardID, {
+    const body = request.body;
+    if (!isShardStatus(body)) {
+      rejectBody(response);
+      return;
+    }
+
+    statuses[body.shardID] = {
       ...body,
       operational: true,
       lastUpdateTimestamp: Date.now(),
-    });
+    };
     shardCount = body.shardCount;
 
     get(request, response);
-  }
-
-  function varifyRequest(
-    request: Request, response: Response, body: any
-  ): body is ShardStatus {
-    const token = request.headers['www-authenticate'];
-
-    if (token !== `Bearer ${FAMILY_PASS_PHRASE}`) {
-      rejectToken(response, token);
-      return false;
-    }
-
-    if (!request.is('application/json') || !isShardStatus(body)) {
-      rejectBody(response);
-      return false;
-    }
-
-    return true;
   }
 
   function isShardStatus(body: any): body is ShardStatus {
