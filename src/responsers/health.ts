@@ -41,7 +41,7 @@ export namespace Health {
   setInterval(() => detectfailure(), STATUS_UPDATE_SPAN);
 
   export function get(_: Request, response: Response): void {
-    const completed = shardCount === statuses.length;
+    const completed = shardCount === statuses.reduce(count => ++count, 0);
 
     const body: EntireStatus = {
       ready: completed || process.uptime() > STATUS_UPDATE_SPAN * 2,
